@@ -7,29 +7,24 @@ Created on Fri Aug 28 00:13:55 2020
 
 #Import necessary libraries
 import numpy as np
-from experience_replay import ReplayBuffer
 from unityagents import UnityEnvironment
 from torch.optim import Adam
-import os
-
 from maddpg_agent import Agent
-
 import matplotlib.pyplot as plt
-
 from collections import deque
 
 #Initialize hyperparameters
-lr_actor = 1.5e-4
-lr_critic = 1.5e-4
-weight_decay = 0.0001
-batch_size = 128
+lr_actor = 1e-4
+lr_critic = 1e-4
+weight_decay = 0.00001
+batch_size = 256
 buffer_size = int(1e5)
-episodes = 400
+episodes = 10000
 tau = 1e-3
-gamma = 0.99
+gamma = 0.995
 t_max = 1000
-update_every = 1
-seed = 3
+update_every = 4
+seed = 10
 
 #Make a kwargs dictionary
 kwargs = {'actor_optim': Adam, 'critic_optim': Adam, 'lr_actor': lr_actor,
@@ -68,7 +63,7 @@ if __name__ == '__main__':
     state_space = len(env_info.vector_observations[0])
     action_space = brain.vector_action_space_size
     num_agents = env_info.vector_observations.shape[0]
-        
+                
     #Create the agent
     agent = Agent(state_space, action_space, num_agents, **kwargs)
     
@@ -84,7 +79,7 @@ if __name__ == '__main__':
     for episode in range(1, episodes+1):
         
         #Reset the rewards every episode
-        episodic_rewards = np.zeros(2)
+        episodic_rewards = 0
         
         #Get the initial state
         env_info = env.reset(train_mode=True)[brain_name]
@@ -94,10 +89,16 @@ if __name__ == '__main__':
         t = 0
                         
         for t in range(t_max):
-                                                
-            #Choose an action for both agents
-            actions = agent.act(state)
             
+            actions = []
+            
+            for i in range(num_agents):
+                #Choose an action for both agents
+                actions.append(agent.act(state[i], i))
+            
+            #Concatenate every action into one
+            actions = np.concatenate(actions, axis=0)
+                        
             #Perform the action
             env_info = env.step(actions)[brain_name]
                         
@@ -116,7 +117,7 @@ if __name__ == '__main__':
             #Update the state
             state = next_state
             
-            episodic_rewards += reward
+            episodic_rewards += max(reward)
             
             #Update the agent every n time steps
             if t % update_every == 0 and len(agent.buffer[str(0)]) >= batch_size:
@@ -132,8 +133,8 @@ if __name__ == '__main__':
         total_rewards.append(episodic_rewards)
         
         if episode % 100 == 0:
-            print("Episode: {}, Rewards: {}, {}".format(episode, np.mean(rewards_window), np.mean(rewards_window)))
-            agent.save(os.path.join(path_to_model, 'agent'))
+            print("Episode: {}, Rewards: {}".format(episode, np.mean(rewards_window)))
+            agent.save(path_to_model)
     
             if np.mean(rewards_window) >= 0.5:
                 print("Environment solved in {} number of episodes...".format(episode))

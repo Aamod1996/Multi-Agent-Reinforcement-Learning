@@ -64,7 +64,7 @@ class Agent:
         
         #Get the next_actions for all agents using target actors
         next_actions = {str(i): self.actor_targets[str(i)](next_states[str(i)]) for i in range(self.num_agents)}
-        
+
         #Choose experiences from all agents
         for i in range(self.num_agents):
             
@@ -97,29 +97,24 @@ class Agent:
         for i in range(self.num_agents):
             self.soft_update(self.actor_locals[str(i)], self.actor_targets[str(i)], self.tau)
         
-    def act(self, states, add_noise=False):
+    def act(self, state, i, add_noise=False):
         
-        states = torch.from_numpy(states).float().to(self.device)
-        actions = []
+        state = torch.from_numpy(state).float().to(self.device)
         
-        for i in range(self.num_agents):
-            #Set the actor to eval mode
-            self.actor_locals[str(i)].eval()
+        #Set the actor to eval mode
+        self.actor_locals[str(i)].eval()
+        
+        with torch.no_grad():
+            action = self.actor_locals[str(i)](state).unsqueeze(0).cpu().data.numpy()
             
-            with torch.no_grad():
-                actions.append(self.actor_locals[str(i)](states[i]).cpu().data.numpy())
-                
-            #Set the actor in training mode
-            self.actor_locals[str(i)].train()
-        
-            #Add noise to the action
-            if add_noise:
-                actions[i] += self.noise.sample()
-                
-        #Concatenate every action into one
-        actions = np.concatenate(actions, axis=0)
-            
-        return np.clip(actions, -1, 1)
+        #Set the actor in training mode
+        self.actor_locals[str(i)].train()
+    
+        #Add noise to the action
+        if add_noise:
+            action += self.noise.sample()
+
+        return np.clip(action, -1, 1)
     
     def step(self, experiences, gamma=1.0):
         
@@ -133,11 +128,16 @@ class Agent:
             target_param.data.copy_(tau*(local_param.data) + (1.0-tau)*(target_param.data))
             
     def save(self, path):
-        torch.save(self.actor_local.state_dict(), os.path.join(path, 'actor'))
+        for i in range(self.num_agents):
+            torch.save(self.actor_locals[str(i)].state_dict(), os.path.join(path, 'actor_{}'.format(i)))
+        
         torch.save(self.critic_local.state_dict(), os.path.join(path, 'critic'))
         
     def load(self, path):
-        self.actor_local.load_state_dict(torch.load(os.path.join(path, 'actor')))
+        
+        for i in range(self.num_agents):
+            self.actor_locals[str(i)].load_state_dict(torch.load(os.path.join(path, 'actor_{}'.format(i))))
+            
         self.critic_local.load_state_dict(torch.load(os.path.join(path, 'critic')))
         
 #Add a class for Noise 

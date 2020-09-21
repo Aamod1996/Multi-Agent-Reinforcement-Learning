@@ -53,9 +53,9 @@ class Critic(nn.Module):
         self.input_shape = input_shape
         self.output_shape = output_shape
         self.seed = torch.manual_seed(seed)
-        
-        self.input = nn.Linear(self.input_shape, 400)
-        self.fc1 = nn.Linear(400+self.output_shape, 300)
+                
+        self.input = nn.Linear(self.input_shape+self.output_shape, 400)
+        self.fc1 = nn.Linear(400, 300)
         self.output = nn.Linear(300, 1)
         
         #Initialize
@@ -64,8 +64,8 @@ class Critic(nn.Module):
     def forward(self, state, action):
         
         #Forward pass
-        x = F.relu(self.input(state))
-        x = torch.cat((x, action), dim=1)
+        x = torch.cat((state, action), dim=1)
+        x = F.relu(self.input(x))
         x = F.relu(self.fc1(x))
         x = self.output(x)
         return x

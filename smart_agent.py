@@ -1,78 +1,116 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Aug 27 23:51:09 2020
+Created on Fri Aug 28 00:13:55 2020
 
 @author: Aamod Save
 """
 
-from unityagents import UnityEnvironment
+#Import necessary libraries
 import numpy as np
-from networks import MLP
-import torch
+from unityagents import UnityEnvironment
+from maddpg_agent import Agent
+import matplotlib.pyplot as plt
+from collections import deque
+from torch.optim import Adam
 
-#Path to environment
-path_to_env = "banana_env/Banana.exe"
+#Initialize hyperparameters
+n_test = 4
+t_max = 100000
 
-#Path to saved model
-model_path = "trained_models/model"
+#Make a kwargs dictionary
+kwargs = {'actor_optim': Adam, 'critic_optim': Adam, 'lr_actor': 0,
+          'lr_critic': 0, 'tau': 0, 'seed': 0, 'weight_decay': 0,
+          'buffer_size': 0, 'batch_size': 0}
 
-#Number of test episodes
-n_test = 5
-t_max = 1000
+#Specify the path to the environment
+path_to_env = 'Tennis_Windows_x86_64/Tennis.exe'
 
+#Specify model save path
+path_to_model = 'trained_models/'
+    
+def plot_rewards(rewards, episodes):
+    
+    plt.figure()
+    plt.plot(range(1, episodes+1), rewards)
+    plt.xlabel('Episodes')
+    plt.ylabel('Rewards')
+    plt.title("Agent")
+    plt.show()
+    
 #Main function
 if __name__ == '__main__':
-    
+        
     #Load the environment
-    env = UnityEnvironment(path_to_env)
+    env = UnityEnvironment(file_name=path_to_env)
     
-    #Get the banana brain
+    # get the default brain
     brain_name = env.brain_names[0]
     brain = env.brains[brain_name]
     
-    #Reset the env to get state and action space
-    env_info = env.reset()[brain_name]
-
-    #Get the state an actions spaces
+    # reset the environment
+    env_info = env.reset(train_mode=True)[brain_name]
+    
+    #Get state space and action space
     state_space = len(env_info.vector_observations[0])
     action_space = brain.vector_action_space_size
+    num_agents = env_info.vector_observations.shape[0]
+                
+    #Create the agent
+    agent = Agent(state_space, action_space, num_agents, **kwargs)
+    agent.load(path_to_model)
     
-    #Create the network to load saved model parameters
-    agent = MLP(state_space, action_space)
+    #Track rewards
+    total_rewards = []
+    rewards_window = deque(maxlen=100)
     
-    #Load the saved model
-    agent.load_state_dict(torch.load(model_path))
-    
-    #Watch the smart agent play
-    for n in range(n_test):
+    print("Watch a smart agent play...")
+            
+    #Start the training 
+    for episode in range(1, n_test+1):
         
-        rewards = 0
+        #Reset the rewards every episode
+        episodic_rewards = 0
         
-        #Reset the env
-        env_info = env.reset()[brain_name]
-        state = env_info.vector_observations[0]
+        #Get the initial state
+        env_info = env.reset(train_mode=True)[brain_name]
+        state = env_info.vector_observations
         
-        done = False
-        
+        done = False   
+        t = 0
+                        
         for t in range(t_max):
-        
-            #Choose the best action 
-            Q_values = agent(torch.from_numpy(state).float())
-            action = np.argmax(list(Q_values.detach())).astype(int)
             
+            actions = []
+            
+            for i in range(num_agents):
+                #Choose an action for both agents
+                actions.append(agent.act(state[i], i))
+            
+            #Concatenate every action into one
+            actions = np.concatenate(actions, axis=0)
+                        
             #Perform the action
-            env_info = env.step(action)[brain_name]
-            next_state = env_info.vector_observations[0]
-            reward = env_info.rewards[0]
-            done = env_info.local_done[0]
+            env_info = env.step(actions)[brain_name]
+                        
+            #Get agent observations
+            next_state = env_info.vector_observations   
+            reward = env_info.rewards                  
+            done = env_info.local_done 
             
+            #Update the state
             state = next_state
-            rewards += reward
             
-            if done:
-                print("Episode finished in {} timesteps!".format(t))
-                print("Rewards earned: {}".format(rewards))
+            episodic_rewards += max(reward)
+            
+            if done[0] or done[1]:
                 break
             
+        #Track rewards
+        rewards_window.append(episodic_rewards)
+        total_rewards.append(episodic_rewards)
+            
+    #Plot the rewards
+    plot_rewards(total_rewards, episode)
+    
     #Close the environment
     env.close()

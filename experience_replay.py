@@ -6,19 +6,18 @@ Created on Fri Aug 28 00:12:53 2020
 """
 
 import numpy as np
-import torch
 import random
+import torch
 
-#Define the class replay buffer
+
 class ReplayBuffer():
-    
     """
-    buffer: [(state, action, reward, next_state, done), ...]
-    """
+    Replay buffer to store experiences of agents to learn from.
     
+    buffer: [[state, action, reward, next_state, done], ...]
+    """
     def __init__(self, buffer_size, batch_size, seed):
         
-        #Initialize buffer
         self.buffer_size = buffer_size
         self.batch_size = batch_size
         self.memory = []
@@ -26,16 +25,26 @@ class ReplayBuffer():
         self.seed = random.seed(seed)
         
     def store(self, experience):
+        """
+        Store experience into the buffer. If the buffer is full delete older experiences.
         
-        #If buffer is full delete the oldest experience
+        Args:
+            experience: type(list)
+        """
         if len(self.memory) >= self.buffer_size:
             self.memory.pop(0)
         
         self.memory.append(experience)
         
     def sample_batch(self):
+        """
+        Sample a batch of size BATCH_SIZE from the buffer to learn from.
         
-        #Sample a batch with batch_size number of observations
+        Args:
+            None
+        Returns:
+            batch: sampled batch
+        """
         batch = random.sample(self.memory, self.batch_size)
         
         states = torch.from_numpy(np.vstack([e[0] for e in batch if e is not None])).float().to(self.device)
@@ -47,7 +56,14 @@ class ReplayBuffer():
         return (states, actions, rewards, next_states, dones)
         
     def clear_buffer(self):
+        """
+        Erase the contents of the buffer.
+        """
         self.memory = []
         
     def __len__(self):
+        """
+        Check the length of the buffer(number of experiences).
+        """
         return len(self.memory)
+    

@@ -5,40 +5,40 @@ Created on Fri Aug 28 00:13:55 2020
 @author: Aamod Save
 """
 
-#Import necessary libraries
 import numpy as np
-from unityagents import UnityEnvironment
-from torch.optim import Adam
-from maddpg_agent import Agent
-import matplotlib.pyplot as plt
 from collections import deque
+import matplotlib.pyplot as plt
+from torch.optim import Adam
+from maddpg_agent import Agents
+from unityagents import UnityEnvironment
 
-#Initialize hyperparameters
-lr_actor = 1e-4
-lr_critic = 1e-4
-weight_decay = 0.00001
-batch_size = 256
-buffer_size = int(1e5)
-episodes = 10000
-tau = 1e-3
-gamma = 0.995
-t_max = 1000
-update_every = 4
-seed = 10
+LR_ACTOR = 1e-4
+LR_CRITIC = 1e-4
+WEIGHT_DECAY = 0.00001
+BATCH_SIZE = 256
+BUFFER_SIZE = int(1e5)
+EPISODES = 10000
+TAU = 1e-3
+GAMMA = 0.995
+T_MAX = 1000
+UPDATE_EVERY = 4
+SEED = 10
 
-#Make a kwargs dictionary
-kwargs = {'actor_optim': Adam, 'critic_optim': Adam, 'lr_actor': lr_actor,
-          'lr_critic': lr_critic, 'tau': tau, 'seed': seed, 'weight_decay': weight_decay,
-          'buffer_size': buffer_size, 'batch_size': batch_size}
+kwargs = {'actor_optim': Adam, 'critic_optim': Adam, 'lr_actor': LR_ACTOR,
+          'lr_critic': LR_CRITIC, 'tau': TAU, 'seed': SEED, 'weight_decay': WEIGHT_DECAY,
+          'buffer_size': BUFFER_SIZE, 'batch_size': BATCH_SIZE}
 
-#Specify the path to the environment
-path_to_env = 'Tennis_Windows_x86_64/Tennis.exe'
-
-#Specify model save path
-path_to_model = 'trained_models/'
+PATH_TO_ENV = 'Tennis_Windows_x86_64/Tennis.exe'
+PATH_TO_MODEL = 'trained_models/'
     
 def plot_rewards(rewards, episodes):
+    """
+    Plot the rewards gained vs number of episodes.
     
+    Args:
+        rewards: rewards gained per episode, type(list), len(episodes)
+        episodes: total number of episodes, type(int)
+    """
     plt.figure()
     plt.plot(range(1, episodes+1), rewards)
     plt.xlabel('Episodes')
@@ -46,28 +46,20 @@ def plot_rewards(rewards, episodes):
     plt.title("Agent")
     plt.show()
     
-#Main function
 if __name__ == '__main__':
         
-    #Load the environment
-    env = UnityEnvironment(file_name=path_to_env)
+    env = UnityEnvironment(file_name=PATH_TO_ENV)
     
-    # get the default brain
-    brain_name = env.brain_names[0]
+    brain_name = env.brain_names[0]  # Get the default brain
     brain = env.brains[brain_name]
     
-    # reset the environment
     env_info = env.reset(train_mode=True)[brain_name]
-    
-    #Get state space and action space
     state_space = len(env_info.vector_observations[0])
     action_space = brain.vector_action_space_size
     num_agents = env_info.vector_observations.shape[0]
                 
-    #Create the agent
-    agent = Agent(state_space, action_space, num_agents, **kwargs)
+    agent = Agents(state_space, action_space, num_agents, **kwargs)
     
-    #Track rewards
     total_rewards = []
     rewards_window = deque(maxlen=100)
     
@@ -75,66 +67,52 @@ if __name__ == '__main__':
         
     env_solved = False
     
-    #Start the training 
-    for episode in range(1, episodes+1):
+    for episode in range(1, EPISODES+1):
         
-        #Reset the rewards every episode
         episodic_rewards = 0
         
-        #Get the initial state
         env_info = env.reset(train_mode=True)[brain_name]
         state = env_info.vector_observations
         
         done = False   
         t = 0
                         
-        for t in range(t_max):
+        for t in range(T_MAX):
             
             actions = []
             
             for i in range(num_agents):
-                #Choose an action for both agents
                 actions.append(agent.act(state[i], i))
             
-            #Concatenate every action into one
             actions = np.concatenate(actions, axis=0)
                         
-            #Perform the action
             env_info = env.step(actions)[brain_name]
-                        
-            #Get agent observations
             next_state = env_info.vector_observations   
             reward = env_info.rewards                  
             done = env_info.local_done 
             
             experiences = []
-            #Store agent1 obs
             for i in range(num_agents):
                 experiences.append([state[i], actions[i], reward[i], next_state[i], done[i]])
             
-            agent.step(experiences, gamma)
+            agent.step(experiences)
             
-            #Update the state
             state = next_state
             
             episodic_rewards += max(reward)
             
-            #Update the agent every n time steps
-            if t % update_every == 0 and len(agent.buffer[str(0)]) >= batch_size:
-                
-                #Train the agent
-                agent.train(gamma)
+            if t % UPDATE_EVERY == 0 and len(agent.buffer[str(0)]) >= BATCH_SIZE:
+                agent.train(GAMMA)
             
             if done[0] or done[1]:
                 break
             
-        #Track rewards
         rewards_window.append(episodic_rewards)
         total_rewards.append(episodic_rewards)
         
         if episode % 100 == 0:
             print("Episode: {}, Rewards: {}".format(episode, np.mean(rewards_window)))
-            agent.save(path_to_model)
+            agent.save(PATH_TO_MODEL)
     
             if np.mean(rewards_window) >= 0.5:
                 print("Environment solved in {} number of episodes...".format(episode))
@@ -143,8 +121,6 @@ if __name__ == '__main__':
         if env_solved:
             break
             
-    #Plot the rewards
     plot_rewards(total_rewards, episode)
     
-    #Close the environment
     env.close()
